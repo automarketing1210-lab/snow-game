@@ -4,6 +4,7 @@ class SoundEngine {
   private masterGain: GainNode | null = null;
   private isMuted: boolean = false;
   private volume: number = 0.5;
+  private sharedNoiseBuffer: AudioBuffer | null = null;
 
   private init() {
     if (this.ctx) return;
@@ -13,6 +14,14 @@ class SoundEngine {
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = this.isMuted ? 0 : this.volume;
       this.masterGain.connect(this.ctx.destination);
+
+      // Pre-allocate 1-second reusable white noise buffer once
+      const bufferSize = this.ctx.sampleRate;
+      this.sharedNoiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const output = this.sharedNoiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
     } catch {
       // Audio context not available or blocked by autoplay
     }
@@ -39,16 +48,17 @@ class SoundEngine {
     }
   }
 
-  // Helper for generating white noise buffers
-  private createNoiseBuffer(duration: number): AudioBuffer | null {
-    if (!this.ctx) return null;
-    const bufferSize = this.ctx.sampleRate * duration;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const output = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
+  // Fast reusable noise buffer getter
+  private getNoiseBuffer(): AudioBuffer | null {
+    if (!this.sharedNoiseBuffer && this.ctx) {
+      const bufferSize = this.ctx.sampleRate;
+      this.sharedNoiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const output = this.sharedNoiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
     }
-    return buffer;
+    return this.sharedNoiseBuffer;
   }
 
   // Throw whoosh sound
@@ -59,7 +69,7 @@ class SoundEngine {
 
     const now = this.ctx.currentTime;
     const noise = this.ctx.createBufferSource();
-    const noiseBuffer = this.createNoiseBuffer(0.25 + charge * 0.15);
+    const noiseBuffer = this.getNoiseBuffer();
     if (!noiseBuffer) return;
     noise.buffer = noiseBuffer;
 
@@ -93,7 +103,7 @@ class SoundEngine {
 
     // Noise component (snow splat)
     const noise = this.ctx.createBufferSource();
-    const noiseBuffer = this.createNoiseBuffer(0.22);
+    const noiseBuffer = this.getNoiseBuffer();
     if (!noiseBuffer) return;
     noise.buffer = noiseBuffer;
 
@@ -200,6 +210,36 @@ class SoundEngine {
     });
   }
 
+  // Snowball crafting / sculpting pat sound
+  public playSculpt(progress: number = 0) {
+    if (this.isMuted) return;
+    this.resume();
+    if (!this.ctx || !this.masterGain) return;
+
+    const now = this.ctx.currentTime;
+    const noise = this.ctx.createBufferSource();
+    const noiseBuffer = this.getNoiseBuffer();
+    if (!noiseBuffer) return;
+    noise.buffer = noiseBuffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(350 + progress * 600, now);
+    filter.Q.value = 1.8;
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.09 + progress * 0.05, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    noise.start(now);
+    noise.stop(now + 0.11);
+  }
+
   // Footstep crunch on snow
   public playFootstep() {
     if (this.isMuted) return;
@@ -208,7 +248,7 @@ class SoundEngine {
 
     const now = this.ctx.currentTime;
     const noise = this.ctx.createBufferSource();
-    const noiseBuffer = this.createNoiseBuffer(0.08);
+    const noiseBuffer = this.getNoiseBuffer();
     if (!noiseBuffer) return;
     noise.buffer = noiseBuffer;
 
@@ -289,7 +329,7 @@ class SoundEngine {
 
     const now = this.ctx.currentTime;
     const noise = this.ctx.createBufferSource();
-    const noiseBuffer = this.createNoiseBuffer(0.18);
+    const noiseBuffer = this.getNoiseBuffer();
     if (!noiseBuffer) return;
     noise.buffer = noiseBuffer;
 

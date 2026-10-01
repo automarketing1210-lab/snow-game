@@ -165,23 +165,61 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
       </div>
 
-      {/* Crosshair (Centered in screen) */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
+      {/* Crosshair & Snowball Sculpting Gauge (Centered in screen) */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center justify-center">
+        {/* Dynamic Aim Ring */}
         <div
-          className={`rounded-full border border-white/80 transition-all duration-75 flex items-center justify-center ${
-            charge > 0.05 ? 'scale-125 border-amber-400 bg-amber-400/10' : 'w-7 h-7'
+          className={`relative rounded-full transition-all duration-75 flex items-center justify-center ${
+            charge > 0.05
+              ? charge >= 0.75
+                ? 'border-2 border-amber-400 bg-amber-400/20 shadow-[0_0_20px_#f59e0b] scale-125 animate-pulse'
+                : charge >= 0.35
+                ? 'border-2 border-sky-400 bg-sky-400/15 shadow-[0_0_12px_#38bdf8]'
+                : 'border border-cyan-300 bg-cyan-300/10'
+              : 'w-7 h-7 border border-white/80'
           }`}
           style={{
-            width: `${28 + charge * 24}px`,
-            height: `${28 + charge * 24}px`,
+            width: `${28 + charge * 36}px`,
+            height: `${28 + charge * 36}px`,
           }}
         >
-          {/* Center aiming dot */}
-          <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_6px_#fff]" />
+          {/* Growing Snowball Icon in center */}
+          {charge > 0.05 ? (
+            <div
+              className={`rounded-full shadow-md transition-all ${
+                charge >= 0.75
+                  ? 'bg-gradient-to-tr from-amber-200 to-white shadow-amber-400/80'
+                  : 'bg-white shadow-sky-300/60'
+              }`}
+              style={{
+                width: `${10 + charge * 24}px`,
+                height: `${10 + charge * 24}px`,
+              }}
+            />
+          ) : (
+            <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_6px_#fff]" />
+          )}
         </div>
-        {charge > 0.1 && (
-          <div className="absolute -bottom-6 text-[10px] font-mono font-bold text-amber-300 tracking-wider">
-            ЗАРЯД {Math.round(charge * 100)}%
+
+        {/* Sculpting Tier Badge & Progress Info */}
+        {charge > 0.05 && (
+          <div className="absolute top-14 flex flex-col items-center gap-1 min-w-[200px] text-center">
+            <div
+              className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider shadow-lg border backdrop-blur-md transition-all ${
+                charge >= 0.75
+                  ? 'bg-amber-500/90 text-slate-950 border-amber-300 shadow-amber-500/40 animate-bounce'
+                  : charge >= 0.35
+                  ? 'bg-sky-600/90 text-white border-sky-300 shadow-sky-500/30'
+                  : 'bg-slate-800/90 text-cyan-300 border-cyan-400/60'
+              }`}
+            >
+              {charge >= 0.75 && '💥 БОЛЬШОЙ МЕГА-СНЕЖОК (48 УРОНА)'}
+              {charge >= 0.35 && charge < 0.75 && '🔵 СРЕДНИЙ КОМ (24 УРОНА)'}
+              {charge < 0.35 && '⚪ МАЛЫЙ СНЕЖОК (12 УРОНА)'}
+            </div>
+            <div className="text-[10px] font-semibold text-slate-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+              Лепка кома... Отпустите для броска!
+            </div>
           </div>
         )}
       </div>

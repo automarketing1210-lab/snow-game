@@ -35,6 +35,7 @@ export default function App() {
   const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [gameOverWinner, setGameOverWinner] = useState<'blue' | 'red' | null>(null);
+  const [gameSessionId, setGameSessionId] = useState(1);
 
   // Match stats
   const statsRef = useRef<GameStats>({
@@ -112,6 +113,7 @@ export default function App() {
     setRemainingEnemies(1);
     setGameOverWinner(null);
     setIsPaused(false);
+    setGameSessionId((prev) => prev + 1);
   };
 
   const toggleMute = () => {
@@ -140,6 +142,7 @@ export default function App() {
       {/* 3D WebGL Canvas Layer */}
       {hasStarted && (
         <GameCanvas
+          key={gameSessionId}
           gameMode={gameMode}
           difficulty={difficulty}
           aimMode={aimMode}

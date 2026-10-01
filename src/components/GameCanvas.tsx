@@ -71,7 +71,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -88,15 +88,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const moonLight = new THREE.DirectionalLight(0xe8f4ff, 2.3);
     moonLight.position.set(65, 110, 45);
     moonLight.castShadow = true;
-    moonLight.shadow.mapSize.width = 2048;
-    moonLight.shadow.mapSize.height = 2048;
+    moonLight.shadow.mapSize.width = 1024;
+    moonLight.shadow.mapSize.height = 1024;
     moonLight.shadow.camera.near = 10;
-    moonLight.shadow.camera.far = 340;
-    moonLight.shadow.camera.left = -115;
-    moonLight.shadow.camera.right = 115;
-    moonLight.shadow.camera.top = 115;
-    moonLight.shadow.camera.bottom = -115;
-    moonLight.shadow.bias = -0.0004;
+    moonLight.shadow.camera.far = 300;
+    moonLight.shadow.camera.left = -75;
+    moonLight.shadow.camera.right = 75;
+    moonLight.shadow.camera.top = 75;
+    moonLight.shadow.camera.bottom = -75;
+    moonLight.shadow.bias = -0.0003;
     scene.add(moonLight);
 
     const rimLight = new THREE.DirectionalLight(0x7dd3fc, 0.8);
@@ -203,7 +203,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       return t * t * (3 - 2 * t) * (Math.sin(x * 0.05) * Math.cos(z * 0.04) + 1.25) * 8.5;
     }
 
-    const groundGeo = new THREE.PlaneGeometry(550, 550, 140, 140);
+    const groundGeo = new THREE.PlaneGeometry(500, 500, 75, 75);
     const pa = groundGeo.attributes.position;
     for (let i = 0; i < pa.count; i++) {
       pa.setZ(i, hillH(pa.getX(i), -pa.getY(i)));
@@ -366,9 +366,30 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       footprints.push({ mesh, life: 10, maxLife: 10 });
     }
 
-    // --- 7. ENVIRONMENT: TREES, ROCKS, LANTERNS ---
+    // --- 7. ENVIRONMENT: TREES, ROCKS, LANTERNS & CHRISTMAS TREES ---
     const treeGroup = new THREE.Group();
-    function createPineTree(x: number, z: number, scale = 1) {
+    const garlandBulbs: THREE.Mesh[] = [];
+    const baubleColors = [0xef4444, 0xfacc15, 0x10b981, 0x3b82f6, 0xc084fc, 0xf8fafc];
+    const baubleMatCache: Record<number, THREE.MeshStandardMaterial> = {};
+    baubleColors.forEach((c) => {
+      baubleMatCache[c] = new THREE.MeshStandardMaterial({
+        color: c,
+        roughness: 0.18,
+        metalness: 0.85,
+        emissive: c,
+        emissiveIntensity: 0.35,
+      });
+    });
+
+    const starTopMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      roughness: 0.15,
+      metalness: 0.9,
+      emissive: 0xfbbf24,
+      emissiveIntensity: 0.85,
+    });
+
+    function createPineTree(x: number, z: number, scale = 1, isFestive = false) {
       const tree = new THREE.Group();
       const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3e2312, roughness: 0.95 });
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.55 * scale, 0.75 * scale, 4 * scale, 8), trunkMat);
@@ -379,29 +400,80 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const needleMat = new THREE.MeshStandardMaterial({ color: 0x144020, roughness: 0.85, flatShading: true });
       const snowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.65 });
 
-      [
+      const tiers = [
         { y: 4.8, r: 3.4, h: 4.8 },
         { y: 7.8, r: 2.6, h: 4.2 },
         { y: 10.6, r: 1.7, h: 3.8 },
-      ].forEach((lvl) => {
+      ];
+
+      tiers.forEach((lvl, tIdx) => {
         const cone = new THREE.Mesh(new THREE.ConeGeometry(lvl.r * scale, lvl.h * scale, 8), needleMat);
         cone.position.y = lvl.y * scale;
         cone.castShadow = true;
         tree.add(cone);
+
         const snowCap = new THREE.Mesh(new THREE.ConeGeometry(lvl.r * 0.95 * scale, lvl.h * 0.35 * scale, 8), snowMat);
         snowCap.position.y = (lvl.y + lvl.h * 0.3) * scale;
         snowCap.castShadow = true;
         tree.add(snowCap);
+
+        // If Festive Tree: Add Christmas Baubles of random sizes and glossy colors!
+        if (isFestive) {
+          const baubleCount = 5 + tIdx * 2;
+          for (let b = 0; b < baubleCount; b++) {
+            const bAngle = (b / baubleCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+            const bRadius = (lvl.r * 0.82 + Math.random() * 0.15) * scale;
+            const bSize = (0.18 + Math.random() * 0.3) * scale; // Random size bauble!
+            const chosenCol = baubleColors[Math.floor(Math.random() * baubleColors.length)];
+            const bauble = new THREE.Mesh(new THREE.SphereGeometry(bSize, 12, 12), baubleMatCache[chosenCol]);
+            bauble.position.set(
+              Math.cos(bAngle) * bRadius,
+              (lvl.y - lvl.h * 0.32 + (Math.random() - 0.5) * 0.3) * scale,
+              Math.sin(bAngle) * bRadius
+            );
+            bauble.castShadow = true;
+            tree.add(bauble);
+          }
+
+          // Twinkling garland fairy light bulbs!
+          const lightCount = 8;
+          for (let g = 0; g < lightCount; g++) {
+            const gAngle = (g / lightCount) * Math.PI * 2;
+            const gRadius = lvl.r * 0.92 * scale;
+            const bulbCol = baubleColors[(g + tIdx * 2) % baubleColors.length];
+            const bulb = new THREE.Mesh(
+              new THREE.SphereGeometry(0.14 * scale, 8, 8),
+              new THREE.MeshBasicMaterial({ color: bulbCol })
+            );
+            bulb.position.set(
+              Math.cos(gAngle) * gRadius,
+              (lvl.y - lvl.h * 0.18) * scale,
+              Math.sin(gAngle) * gRadius
+            );
+            tree.add(bulb);
+            garlandBulbs.push(bulb);
+          }
+        }
       });
+
+      // If Festive Tree: Golden Radiant Star on Top!
+      if (isFestive) {
+        const starMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.85 * scale, 0), starTopMat);
+        starMesh.position.y = (10.6 + 2.3) * scale;
+        tree.add(starMesh);
+      }
 
       tree.position.set(x, hillH(x, z) - 0.3, z);
       treeGroup.add(tree);
     }
 
-    for (let i = 0; i < 68; i++) {
-      const angle = (i / 68) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
-      const dist = 55 + Math.random() * 75;
-      createPineTree(Math.cos(angle) * dist, Math.sin(angle) * dist, 0.85 + Math.random() * 0.85);
+    // Spawn 72 trees of random scale, dressing ~24 of them as festive Christmas trees!
+    for (let i = 0; i < 72; i++) {
+      const angle = (i / 72) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+      const dist = 52 + Math.random() * 75;
+      const randScale = 0.65 + Math.random() * 1.35; // Random diverse sizes!
+      const isFestive = i % 3 === 0; // Every 3rd tree is a decorated Christmas tree!
+      createPineTree(Math.cos(angle) * dist, Math.sin(angle) * dist, randScale, isFestive);
     }
     scene.add(treeGroup);
 
@@ -456,6 +528,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       hatDetached: boolean;
       armL: THREE.Group;
       armR: THREE.Group;
+      inHandBall: THREE.Mesh;
       shieldMesh?: THREE.Mesh;
       hp: number;
       maxHp: number;
@@ -626,6 +699,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const mittenR = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), mittenMat);
       mittenR.position.y = 3.2;
       armR.add(mittenR);
+
+      // In-hand sculpting snowball mesh!
+      const inHandBall = new THREE.Mesh(
+        new THREE.SphereGeometry(0.7, 16, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.85,
+          emissive: colorMain,
+          emissiveIntensity: 0.2,
+        })
+      );
+      inHandBall.position.set(0, 3.5, 0);
+      inHandBall.visible = false;
+      armR.add(inHandBall);
+
       armR.position.set(2.0, 5.8, 0);
       armR.rotation.z = -Math.PI / 3;
       group.add(armR);
@@ -671,6 +759,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         hatDetached: false,
         armL,
         armR,
+        inHandBall,
         shieldMesh,
         hp: maxHp,
         maxHp,
@@ -735,11 +824,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       startPos: THREE.Vector3,
       launchVelocity: THREE.Vector3,
       owner: 'blue' | 'red',
-      isCharged: boolean = false,
+      tier: 'small' | 'medium' | 'large' = 'small',
       damageMultiplier: number = 1
     ) {
       const group = new THREE.Group();
-      const scale = isCharged ? 1.8 : 1.0;
+      let scale = 0.8;
+      let baseDamage = 14;
+      if (tier === 'medium') {
+        scale = 1.35;
+        baseDamage = 28;
+      } else if (tier === 'large') {
+        scale = 2.15;
+        baseDamage = 50;
+      }
+
       const mesh = new THREE.Mesh(snowballGeo, snowballMat);
       mesh.scale.setScalar(scale);
       mesh.castShadow = true;
@@ -751,7 +849,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         new THREE.MeshBasicMaterial({
           color: auraColor,
           transparent: true,
-          opacity: isCharged ? 0.7 : 0.4,
+          opacity: tier === 'large' ? 0.85 : (tier === 'medium' ? 0.55 : 0.35),
           blending: THREE.AdditiveBlending,
         })
       );
@@ -760,18 +858,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       group.position.copy(startPos);
       scene.add(group);
 
-      const baseDamage = isCharged ? 32 : 12;
       projectiles.push({
         mesh: group,
         velocity: launchVelocity.clone(),
         owner,
         damage: Math.round(baseDamage * damageMultiplier),
-        radius: 0.7 * scale,
+        radius: 0.65 * scale,
         life: 4.5,
-        isCharged,
+        isCharged: tier !== 'small',
       });
 
-      sounds.playThrow(isCharged ? 1 : 0);
+      sounds.playThrow(tier === 'large' ? 1 : (tier === 'medium' ? 0.5 : 0));
     }
 
     // --- 11. VFX PARTICLES ---
@@ -788,6 +885,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const pWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const pBlueMat = new THREE.MeshBasicMaterial({ color: 0x7dd3fc });
     const pRedMat = new THREE.MeshBasicMaterial({ color: 0xfca5a5 });
+
+    const sharedSmokeGeo = new THREE.PlaneGeometry(3.5, 3.5);
+    const sharedSmokeMat = new THREE.MeshBasicMaterial({
+      map: footprintTex,
+      transparent: true,
+      opacity: 0.7,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
 
     function spawnSnowBurst(pos: THREE.Vector3, count = 28, isCritical = false) {
       for (let i = 0; i < count; i++) {
@@ -809,15 +915,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
       }
 
-      const smokeGeo = new THREE.PlaneGeometry(3.5, 3.5);
-      const smokeMat = new THREE.MeshBasicMaterial({
-        map: footprintTex,
-        transparent: true,
-        opacity: 0.7,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      });
-      const smokeMesh = new THREE.Mesh(smokeGeo, smokeMat);
+      const smokeMesh = new THREE.Mesh(sharedSmokeGeo, sharedSmokeMat);
       smokeMesh.position.copy(pos);
       smokeMesh.rotation.x = -Math.PI / 2;
       scene.add(smokeMesh);
@@ -990,16 +1088,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       lastMouseY: 0,
     };
 
-    // Instant Reliable Shoot Function
+    // Instant Reliable Shoot Function with Snowball Sculpting Tiers
     function executePlayerShot(chargePercent: number) {
       const now = performance.now() / 1000;
       const isRapid = activePowerUps.some((p) => p.type === 'rapid');
-      const cooldown = isRapid ? 0.12 : 0.35;
+      const cooldown = isRapid ? 0.12 : 0.3;
       if (now - lastPlayerShotTime < cooldown) return;
       lastPlayerShotTime = now;
 
       statsRef.current.shotsFired++;
-      const isCharged = chargePercent >= 0.65;
+
+      // Determine Snowball Tier based on charge amount (0.0 to 1.0)
+      let tier: 'small' | 'medium' | 'large' = 'small';
+      if (chargePercent >= 0.75) {
+        tier = 'large';
+      } else if (chargePercent >= 0.35) {
+        tier = 'medium';
+      } else {
+        tier = 'small';
+      }
+
+      // Hide in-hand sculpt snowball on release
+      player.inHandBall.visible = false;
 
       // 1. Calculate Target Point in 3D world
       const targetPoint = new THREE.Vector3();
@@ -1008,7 +1118,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
-        // Raycast against infinite horizontal plane at snowman chest height (y = 5.5)
         const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -5.5);
         const intersect = new THREE.Vector3();
 
@@ -1018,7 +1127,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           raycaster.ray.at(80, targetPoint);
         }
 
-        // Ensure target is in front of the player
         const distFromPlayer = targetPoint.distanceTo(player.group.position);
         if (distFromPlayer < 8) {
           const camFwd = new THREE.Vector3(-Math.sin(cameraControl.yaw), 0, -Math.cos(cameraControl.yaw));
@@ -1026,7 +1134,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           targetPoint.y = 5.5;
         }
       } else {
-        // Auto-aim to closest alive enemy
         let closestEnemy: SnowmanEntity | null = null;
         let minDist = 999;
         enemies.forEach((e) => {
@@ -1049,15 +1156,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       }
 
-      // 2. Safe Launch Position (chest height, pushed forward)
-      const launchPos = player.group.position.clone();
-      launchPos.y = 6.5;
-      const horizAim = new THREE.Vector3(targetPoint.x - launchPos.x, 0, targetPoint.z - launchPos.z).normalize();
-      launchPos.add(horizAim.multiplyScalar(3.2));
+      // CRITICAL FIX: The snowman rotates to face the attack target immediately so body orientation matches!
+      const toAim = new THREE.Vector3(targetPoint.x - player.group.position.x, 0, targetPoint.z - player.group.position.z);
+      if (toAim.lengthSq() > 0.01) {
+        player.group.rotation.y = Math.atan2(toAim.x, toAim.z);
+      }
 
-      // 3. Accurate Ballistic Velocity
+      // Snowman's exact world facing vector
+      const facingYaw = player.group.rotation.y;
+      const forwardX = Math.sin(facingYaw);
+      const forwardZ = Math.cos(facingYaw);
+
+      // Safe Launch Position directly in front of the snowman's chest/mitten
+      const launchPos = player.group.position.clone();
+      launchPos.x += forwardX * 2.8;
+      launchPos.y = 6.2;
+      launchPos.z += forwardZ * 2.8;
+
+      // Ballistic velocity calculation based on tier
+      let speed = 72;
+      if (tier === 'medium') speed = 64;
+      else if (tier === 'large') speed = 58;
+
       const dist = Math.hypot(targetPoint.x - launchPos.x, targetPoint.z - launchPos.z);
-      const speed = isCharged ? 75 : 62;
       const flightTime = Math.max(0.15, dist / speed);
       const gravityComp = 0.5 * 9.8 * flightTime * flightTime;
 
@@ -1069,19 +1190,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         .normalize()
         .multiplyScalar(speed);
 
-      // 4. Fire Single or Triple
+      // Fire Single or Triple
       const hasTriple = activePowerUps.some((p) => p.type === 'triple');
       if (hasTriple) {
         [-0.15, 0, 0.15].forEach((angleOffset) => {
           const spreadVel = launchVelocity.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angleOffset);
-          fireSnowball(launchPos, spreadVel, 'blue', isCharged);
+          fireSnowball(launchPos, spreadVel, 'blue', tier);
         });
       } else {
-        fireSnowball(launchPos, launchVelocity, 'blue', isCharged);
+        fireSnowball(launchPos, launchVelocity, 'blue', tier);
       }
 
-      // Arm throwing animation
+      // Arm energetic throw animation
       player.armR.rotation.x = -Math.PI / 2;
+
+      // Screen shake and burst on medium/large release
+      if (tier === 'large') {
+        screenShake = 0.55;
+        spawnSnowBurst(launchPos, 18, true);
+      } else if (tier === 'medium') {
+        screenShake = 0.2;
+        spawnSnowBurst(launchPos, 8);
+      }
     }
 
     // Key Down: fires immediately on Space tap or starts charging!
@@ -1227,6 +1357,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let currentWave = 1;
     let screenShake = 0;
     let footstepTimer = 0;
+    let sculptSoundTimer = 0;
+
+    // Static reusable vectors to eliminate GC pauses
+    const _vCamForward = new THREE.Vector3();
+    const _vCamRight = new THREE.Vector3();
+    const _vInput = new THREE.Vector3();
+    const _vCamPos = new THREE.Vector3();
+    const _vCamTarget = new THREE.Vector3();
+
+    // Throttled HUD update caches to eliminate React 60fps re-render stuttering
+    let lastSentStamina = -1;
+    let lastSentCharge = -1;
+    let lastSentPlayerHp = -1;
+    let lastSentEnemyHp = -1;
+    let lastPowerUpsCount = -1;
 
     const animate = () => {
       requestAnimationFrame(animate);
@@ -1234,10 +1379,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const delta = Math.min(clock.getDelta(), 0.05);
       const time = clock.getElapsedTime();
 
-      // Animate Aurora Borealis
+      // Animate Aurora Borealis, Twinkling Stars, Radiant Moon & Christmas Lights
       auroraCurtains.forEach((aurora, idx) => {
         aurora.rotation.y += delta * 0.04 * (idx % 2 === 0 ? 1 : -1);
         (aurora.material as THREE.MeshBasicMaterial).opacity = 0.55 + Math.sin(time * 0.8 + idx) * 0.2;
+      });
+
+      // Twinkling Starfield
+      starMat.size = 1.3 + Math.sin(time * 3.5) * 0.35;
+      starMat.opacity = 0.8 + Math.sin(time * 2.0) * 0.18;
+
+      // Radiant Moon Corona Glow
+      moonGlow.scale.setScalar(1.0 + Math.sin(time * 0.75) * 0.06);
+
+      // Twinkling Christmas Tree Garland Fairy Lights
+      garlandBulbs.forEach((bulb, idx) => {
+        const pulse = 0.75 + Math.sin(time * 4.5 + idx * 0.8) * 0.45;
+        bulb.scale.setScalar(pulse);
       });
 
       if (!isPaused && player.hp > 0) {
@@ -1266,24 +1424,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
 
-        // Movement & physics
-        const camForward = new THREE.Vector3(-Math.sin(cameraControl.yaw), 0, -Math.cos(cameraControl.yaw));
-        const camRight = new THREE.Vector3(Math.cos(cameraControl.yaw), 0, -Math.sin(cameraControl.yaw));
+        // Movement & physics (zero allocations)
+        _vCamForward.set(-Math.sin(cameraControl.yaw), 0, -Math.cos(cameraControl.yaw));
+        _vCamRight.set(Math.cos(cameraControl.yaw), 0, -Math.sin(cameraControl.yaw));
 
         let inputX = 0;
         let inputZ = 0;
-        if (keys.w) { inputX += camForward.x; inputZ += camForward.z; }
-        if (keys.s) { inputX -= camForward.x; inputZ -= camForward.z; }
-        if (keys.a) { inputX -= camRight.x; inputZ -= camRight.z; }
-        if (keys.d) { inputX += camRight.x; inputZ += camRight.z; }
+        if (keys.w) { inputX += _vCamForward.x; inputZ += _vCamForward.z; }
+        if (keys.s) { inputX -= _vCamForward.x; inputZ -= _vCamForward.z; }
+        if (keys.a) { inputX -= _vCamRight.x; inputZ -= _vCamRight.z; }
+        if (keys.d) { inputX += _vCamRight.x; inputZ += _vCamRight.z; }
 
         if (touchActionRef.current && (Math.abs(touchActionRef.current.moveX) > 0.1 || Math.abs(touchActionRef.current.moveY) > 0.1)) {
-          inputX += camRight.x * touchActionRef.current.moveX - camForward.x * touchActionRef.current.moveY;
-          inputZ += camRight.z * touchActionRef.current.moveX - camForward.z * touchActionRef.current.moveY;
+          inputX += _vCamRight.x * touchActionRef.current.moveX - _vCamForward.x * touchActionRef.current.moveY;
+          inputZ += _vCamRight.z * touchActionRef.current.moveX - _vCamForward.z * touchActionRef.current.moveY;
         }
 
-        const inputDir = new THREE.Vector3(inputX, 0, inputZ);
-        const isMoving = inputDir.lengthSq() > 0.01;
+        _vInput.set(inputX, 0, inputZ);
+        const isMoving = _vInput.lengthSq() > 0.01;
 
         // Camera tilt roll on strafe
         if (keys.a) cameraControl.roll = THREE.MathUtils.lerp(cameraControl.roll, 0.035, delta * 5);
@@ -1306,9 +1464,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             targetFov = 65;
           }
         } else if (isMoving) {
-          inputDir.normalize();
-          player.velocity.x += inputDir.x * accel * delta;
-          player.velocity.z += inputDir.z * accel * delta;
+          _vInput.normalize();
+          player.velocity.x += _vInput.x * accel * delta;
+          player.velocity.z += _vInput.z * accel * delta;
         } else {
           player.velocity.x -= player.velocity.x * friction * delta;
           player.velocity.z -= player.velocity.z * friction * delta;
@@ -1328,17 +1486,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         player.group.position.x = Math.max(-ARENA_LIMIT, Math.min(ARENA_LIMIT, player.group.position.x));
         player.group.position.z = Math.max(-ARENA_LIMIT, Math.min(ARENA_LIMIT, player.group.position.z));
 
+        // High-sensitivity aim tracking: Snowman's face & chest ALWAYS turn where you look/aim!
+        const aimAngle = Math.atan2(_vCamForward.x, _vCamForward.z);
+        let diff = aimAngle - player.group.rotation.y;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        player.group.rotation.y += diff * 26 * delta;
+
         // Walking / Ice Skating animation
         if (currentSpd > 1.5 && !isDashing) {
           player.walkPhase += currentSpd * delta * (isOnIce ? 0.25 : 0.45);
           player.group.position.y = Math.abs(Math.sin(player.walkPhase)) * (isOnIce ? 0.2 : 0.4);
           player.group.rotation.z = Math.sin(player.walkPhase) * (isOnIce ? 0.12 : 0.06);
-
-          const targetAngle = Math.atan2(player.velocity.x, player.velocity.z);
-          let diff = targetAngle - player.group.rotation.y;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          player.group.rotation.y += diff * 12 * delta;
 
           if (isOnIce) {
             iceSkateSoundTimer += delta;
@@ -1370,15 +1529,63 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           spawnFrostBreath(player.group.position.clone().add(new THREE.Vector3(0, 8.3, 1.2)));
         }
 
-        // Charge and Stamina
+        // Charge and Sculpting Snowball Mechanics
         if (isCharging) {
           const elapsed = (performance.now() - chargeStartTime) / 1000;
-          chargeAmount = Math.min(1.0, elapsed * 1.5);
+          chargeAmount = Math.min(1.0, elapsed / 1.5); // 1.5s to reach large mega snowball!
+
+          // CRITICAL: Rotate snowman to face the camera crosshair aim direction while sculpting!
+          const aimAngle = Math.atan2(_vCamForward.x, _vCamForward.z);
+          let diff = aimAngle - player.group.rotation.y;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          player.group.rotation.y += diff * 18 * delta;
+
+          // In-hand snowball physically grows in his mittens!
+          player.inHandBall.visible = true;
+          const currentBallScale = 0.4 + chargeAmount * 1.6;
+          player.inHandBall.scale.setScalar(currentBallScale);
+
+          // Arms cute patting & rolling animation!
+          const pat = Math.sin(time * 24) * 0.16;
+          player.armR.position.set(1.4 - pat * 0.4, 5.8, 1.4);
+          player.armL.position.set(-1.4 + pat * 0.4, 5.8, 1.4);
+          player.armR.rotation.set(-0.85, -0.4 + pat, -0.6);
+          player.armL.rotation.set(-0.85, 0.4 - pat, 0.6);
+
+          // Rhythmic snow packing sound
+          sculptSoundTimer += delta;
+          if (sculptSoundTimer > 0.18) {
+            sounds.playSculpt(chargeAmount);
+            sculptSoundTimer = 0;
+            // Little gathering snow specks
+            const handPos = player.group.position.clone();
+            handPos.x += Math.sin(player.group.rotation.y) * 2.2;
+            handPos.y += 6.0;
+            handPos.z += Math.cos(player.group.rotation.y) * 2.2;
+            spawnSnowBurst(handPos, 4);
+          }
+        } else {
+          player.inHandBall.visible = false;
+          // Smooth return arms to natural rest positions
+          player.armR.position.lerp(new THREE.Vector3(2.0, 5.8, 0), delta * 8);
+          player.armL.position.lerp(new THREE.Vector3(-2.0, 5.8, 0), delta * 8);
+          player.armL.rotation.set(0, 0, Math.PI / 3);
+          player.armR.rotation.x = THREE.MathUtils.lerp(player.armR.rotation.x, 0, delta * 6);
         }
-        onChargeChange(chargeAmount);
+
+        const quantizedCharge = isCharging ? Math.round(chargeAmount * 20) / 20 : 0;
+        if (quantizedCharge !== lastSentCharge) {
+          lastSentCharge = quantizedCharge;
+          onChargeChange(quantizedCharge);
+        }
 
         if (!isDashing && stamina < 100) stamina = Math.min(100, stamina + delta * 25);
-        onStaminaChange(stamina);
+        const roundedStamina = Math.round(stamina);
+        if (roundedStamina !== lastSentStamina) {
+          lastSentStamina = roundedStamina;
+          onStaminaChange(roundedStamina);
+        }
 
         if (playerInvulnerableTimer > 0) playerInvulnerableTimer -= delta;
 
@@ -1392,14 +1599,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           (fp.mesh.material as THREE.MeshBasicMaterial).opacity = (fp.life / fp.maxLife) * 0.5;
           if (fp.life <= 0) {
             scene.remove(fp.mesh);
+            (fp.mesh.material as THREE.Material).dispose();
             footprints.splice(i, 1);
           }
         }
 
-        // Power-ups
+        // Power-ups (throttled)
         const nowSec = performance.now() / 1000;
         activePowerUps = activePowerUps.filter((p) => p.expiresAt > nowSec);
-        onActivePowerUpsChange(activePowerUps);
+        if (activePowerUps.length !== lastPowerUpsCount) {
+          lastPowerUpsCount = activePowerUps.length;
+          onActivePowerUpsChange(activePowerUps);
+        }
 
         const hasShield = activePowerUps.some((p) => p.type === 'shield');
         if (player.shieldMesh) {
@@ -1529,10 +1740,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             if (enemy.isBoss) {
               [-0.12, 0.12].forEach((offset) => {
                 const sVel = enemyVel.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), offset);
-                fireSnowball(enemyShootPos, sVel, 'red', true, 1.4);
+                fireSnowball(enemyShootPos, sVel, 'red', 'large', 1.4);
               });
             } else {
-              fireSnowball(enemyShootPos, enemyVel, 'red', false);
+              fireSnowball(enemyShootPos, enemyVel, 'red', 'small');
             }
           }
         });
@@ -1799,28 +2010,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         });
 
         const primaryEnemy = enemies[0];
-        onHpChange(
-          player.hp,
-          primaryEnemy ? primaryEnemy.hp : 0,
-          primaryEnemy?.isBoss ? primaryEnemy.hp : undefined,
-          primaryEnemy?.isBoss ? primaryEnemy.maxHp : undefined
-        );
+        const curPlayerHp = Math.round(player.hp);
+        const curEnemyHp = primaryEnemy ? Math.round(primaryEnemy.hp) : 0;
+        if (curPlayerHp !== lastSentPlayerHp || curEnemyHp !== lastSentEnemyHp) {
+          lastSentPlayerHp = curPlayerHp;
+          lastSentEnemyHp = curEnemyHp;
+          onHpChange(
+            curPlayerHp,
+            curEnemyHp,
+            primaryEnemy?.isBoss ? curEnemyHp : undefined,
+            primaryEnemy?.isBoss ? primaryEnemy.maxHp : undefined
+          );
+        }
       }
 
-      // Camera update
-      const camTarget = player.group.position.clone().add(new THREE.Vector3(0, 6.0, 0));
-      const camX = camTarget.x + Math.sin(cameraControl.yaw) * Math.cos(cameraControl.pitch) * cameraControl.distance;
-      const camY = camTarget.y + Math.sin(cameraControl.pitch) * cameraControl.distance;
-      const camZ = camTarget.z + Math.cos(cameraControl.yaw) * Math.cos(cameraControl.pitch) * cameraControl.distance;
+      // Camera update (zero-allocation)
+      const pPos = player.group.position;
+      const camX = pPos.x + Math.sin(cameraControl.yaw) * Math.cos(cameraControl.pitch) * cameraControl.distance;
+      const camY = pPos.y + 6.0 + Math.sin(cameraControl.pitch) * cameraControl.distance;
+      const camZ = pPos.z + Math.cos(cameraControl.yaw) * Math.cos(cameraControl.pitch) * cameraControl.distance;
 
-      camera.position.lerp(new THREE.Vector3(camX, camY, camZ), 0.18);
+      _vCamPos.set(camX, camY, camZ);
+      camera.position.lerp(_vCamPos, 0.18);
 
       if (screenShake > 0.01) {
         camera.position.x += (Math.random() - 0.5) * screenShake * 2.0;
         camera.position.y += (Math.random() - 0.5) * screenShake * 2.0;
         screenShake *= 0.88;
       }
-      camera.lookAt(camTarget);
+      _vCamTarget.set(pPos.x, pPos.y + 6.0, pPos.z);
+      camera.lookAt(_vCamTarget);
       camera.rotation.z += cameraControl.roll;
 
       renderer.render(scene, camera);
