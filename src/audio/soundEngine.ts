@@ -280,6 +280,37 @@ class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.65);
   }
+
+  // Ice skating slide sound
+  public playIceSkate() {
+    if (this.isMuted) return;
+    this.resume();
+    if (!this.ctx || !this.masterGain) return;
+
+    const now = this.ctx.currentTime;
+    const noise = this.ctx.createBufferSource();
+    const noiseBuffer = this.createNoiseBuffer(0.18);
+    if (!noiseBuffer) return;
+    noise.buffer = noiseBuffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2200, now);
+    filter.frequency.linearRampToValueAtTime(1400, now + 0.16);
+    filter.Q.value = 4.5;
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain);
+
+    noise.start(now);
+    noise.stop(now + 0.19);
+  }
 }
 
 export const sounds = new SoundEngine();

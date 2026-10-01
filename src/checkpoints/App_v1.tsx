@@ -156,17 +156,6 @@ export default function App() {
         />
       )}
 
-      {/* Dynamic Frost Vignette on low health */}
-      {hasStarted && playerHp < 45 && (
-        <div
-          className="absolute inset-0 pointer-events-none z-10 transition-opacity duration-300"
-          style={{
-            boxShadow: 'inset 0 0 120px rgba(56, 189, 248, 0.45), inset 0 0 45px rgba(255, 255, 255, 0.3)',
-            opacity: Math.max(0.2, (45 - playerHp) / 45),
-          }}
-        />
-      )}
-
       {/* Floating combat texts */}
       <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
         {floatingTexts.map((ft) => (
