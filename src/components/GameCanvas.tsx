@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { GameMode, Difficulty, AimMode, ActivePowerUp, GameStats, FloatingText } from '../types/game';
+import { GameMode, Difficulty, AimMode, ActivePowerUp, GameStats, FloatingText, PlayerUpgrades } from '../types/game';
 import { sounds } from '../audio/soundEngine';
 
 interface GameCanvasProps {
@@ -15,6 +15,8 @@ interface GameCanvasProps {
   onFloatingText: (text: FloatingText) => void;
   onGameOver: (winner: 'blue' | 'red', stats: GameStats) => void;
   onWaveChange: (wave: number, remainingEnemies: number) => void;
+  onCoinCollected?: (amount: number) => void;
+  upgrades?: PlayerUpgrades;
   statsRef: React.MutableRefObject<GameStats>;
   touchActionRef: React.MutableRefObject<{
     moveX: number;
@@ -39,6 +41,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onFloatingText,
   onGameOver,
   onWaveChange,
+  onCoinCollected,
+  upgrades,
   statsRef,
   touchActionRef,
 }) => {
@@ -543,7 +547,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       frostBreathTimer: number;
     }
 
-    function createDetailedSnowman(colorMain: number, colorAccent: number, isBoss: boolean = false): SnowmanEntity {
+    function createDetailedSnowman(
+      colorMain: number,
+      colorAccent: number,
+      isBoss: boolean = false,
+      skin: string = 'classic'
+    ): SnowmanEntity {
       const scale = isBoss ? 1.6 : 1.0;
       const group = new THREE.Group();
       group.scale.set(scale, scale, scale);
@@ -644,9 +653,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Hat Group (can fly off on headshots!)
       const hatGroup = new THREE.Group();
-      if (isBoss) {
-        // Royal Golden Crown
-        const crownMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.85, roughness: 0.2 });
+      if (isBoss || skin === 'crown') {
+        // Royal Golden Crown with jewels
+        const crownMat = new THREE.MeshStandardMaterial({
+          color: 0xfacc15,
+          metalness: 0.85,
+          roughness: 0.2,
+          emissive: 0xb45309,
+          emissiveIntensity: 0.3,
+        });
         const crownBase = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.3, 0.8, 16), crownMat);
         crownBase.position.y = 9.4;
         hatGroup.add(crownBase);
@@ -656,6 +671,37 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           spike.position.set(Math.cos(a) * 1.3, 10.1, Math.sin(a) * 1.3);
           hatGroup.add(spike);
         }
+      } else if (skin === 'santa') {
+        // Red Santa Hat with white fur trim and pom-pom!
+        const santaMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.75 });
+        const furMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 });
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.45, 20), furMat);
+        rim.position.y = 9.1;
+        hatGroup.add(rim);
+
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(1.3, 1.9, 16), santaMat);
+        cone.position.set(0.2, 10.0, 0);
+        cone.rotation.z = -0.28;
+        hatGroup.add(cone);
+
+        const pomPom = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), furMat);
+        pomPom.position.set(0.85, 10.8, 0);
+        hatGroup.add(pomPom);
+      } else if (skin === 'frost') {
+        // Ice Crystal Crown
+        const frostMat = new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          roughness: 0.1,
+          metalness: 0.9,
+          emissive: 0x0284c7,
+          emissiveIntensity: 0.7,
+        });
+        for (let i = 0; i < 6; i++) {
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.3, 6), frostMat);
+          const a = (i / 6) * Math.PI * 2;
+          spike.position.set(Math.cos(a) * 1.25, 9.8, Math.sin(a) * 1.25);
+          hatGroup.add(spike);
+        }
       } else {
         // Winter Knitted Beanie with fluffy white pom-pom!
         const beanieMat = new THREE.MeshStandardMaterial({ color: colorAccent, roughness: 0.7 });
@@ -663,7 +709,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         beanieBase.position.y = 9.0;
         hatGroup.add(beanieBase);
 
-        const beanieDome = new THREE.Mesh(new THREE.SphereGeometry(1.35, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), beanieMat);
+        const beanieDome = new THREE.Mesh(
+          new THREE.SphereGeometry(1.35, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.5),
+          beanieMat
+        );
         beanieDome.position.y = 9.25;
         hatGroup.add(beanieDome);
 
@@ -775,7 +824,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       };
     }
 
-    const player = createDetailedSnowman(0x38bdf8, 0x1d4ed8, false);
+    const playerSkin = upgrades?.activeSkin || 'classic';
+    const player = createDetailedSnowman(0x38bdf8, 0x1d4ed8, false, playerSkin);
+    const bonusHp = (upgrades?.maxHpLevel || 0) * 25;
+    player.maxHp = 100 + bonusHp;
+    player.hp = player.maxHp;
     player.group.position.set(-18, 0, 0);
 
     let enemies: SnowmanEntity[] = [];
@@ -994,7 +1047,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     snowPoints.frustumCulled = false;
     scene.add(snowPoints);
 
-    // --- 13. POWER-UPS ---
+    // --- 13. FESTIVE HOLIDAY GIFTS (POWER-UPS) ---
     interface ActivePowerUpState {
       type: 'triple' | 'shield' | 'rapid' | 'heal';
       expiresAt: number;
@@ -1002,47 +1055,122 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let activePowerUps: ActivePowerUpState[] = [];
     interface WorldPowerUp {
       mesh: THREE.Group;
-      type: 'triple' | 'shield' | 'rapid' | 'heal';
+      type: 'sack' | 'gift_bag' | 'chest';
       position: THREE.Vector3;
     }
     let worldPowerUps: WorldPowerUp[] = [];
 
     function spawnRandomPowerUp() {
       if (worldPowerUps.length >= 3) return;
-      const types: Array<'triple' | 'shield' | 'rapid' | 'heal'> = ['triple', 'shield', 'rapid', 'heal'];
+      const types: Array<'sack' | 'gift_bag' | 'chest'> = ['sack', 'gift_bag', 'chest'];
       const chosen = types[Math.floor(Math.random() * types.length)];
       const angle = Math.random() * Math.PI * 2;
-      const dist = 10 + Math.random() * 25;
+      const dist = 10 + Math.random() * 26;
       const x = Math.cos(angle) * dist;
       const z = Math.sin(angle) * dist;
 
       const group = new THREE.Group();
-      let color = 0x38bdf8;
-      if (chosen === 'triple') color = 0xf59e0b;
-      if (chosen === 'rapid') color = 0xa855f7;
-      if (chosen === 'heal') color = 0x22c55e;
-      if (chosen === 'shield') color = 0x06b6d4;
 
-      const crystal = new THREE.Mesh(
-        new THREE.OctahedronGeometry(1.2, 0),
-        new THREE.MeshStandardMaterial({
-          color,
-          emissive: color,
-          emissiveIntensity: 0.9,
-          roughness: 0.15,
-          metalness: 0.85,
-        })
-      );
-      crystal.position.y = 1.8;
-      group.add(crystal);
+      if (chosen === 'sack') {
+        // 1. Красный Мешок Санты с подарками (Лечение +45 HP!)
+        const sackBody = new THREE.Mesh(
+          new THREE.SphereGeometry(1.2, 16, 16),
+          new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.85 })
+        );
+        sackBody.scale.set(1.1, 1.25, 1.1);
+        sackBody.position.y = 1.3;
+        sackBody.castShadow = true;
+        group.add(sackBody);
 
-      const beacon = new THREE.Mesh(
-        new THREE.RingGeometry(1.2, 2.0, 24),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
-      );
-      beacon.rotation.x = -Math.PI / 2;
-      beacon.position.y = 0.08;
-      group.add(beacon);
+        const goldRope = new THREE.Mesh(
+          new THREE.TorusGeometry(0.46, 0.1, 8, 16),
+          new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.8 })
+        );
+        goldRope.position.y = 2.45;
+        goldRope.rotation.x = Math.PI / 2;
+        group.add(goldRope);
+
+        const sackTop = new THREE.Mesh(
+          new THREE.ConeGeometry(0.7, 0.75, 12),
+          new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.85 })
+        );
+        sackTop.position.y = 2.85;
+        group.add(sackTop);
+
+        const beacon = new THREE.Mesh(
+          new THREE.RingGeometry(1.2, 2.0, 24),
+          new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+        );
+        beacon.rotation.x = -Math.PI / 2;
+        beacon.position.y = 0.08;
+        group.add(beacon);
+
+      } else if (chosen === 'gift_bag') {
+        // 2. Пакет с подарками (Золотые Монетки +25!)
+        const boxMat = new THREE.MeshStandardMaterial({ color: 0x8b5cf6, roughness: 0.4, metalness: 0.2 });
+        const box = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), boxMat);
+        box.position.y = 1.4;
+        box.castShadow = true;
+        group.add(box);
+
+        const ribbonMat = new THREE.MeshStandardMaterial({
+          color: 0xfacc15,
+          roughness: 0.2,
+          metalness: 0.9,
+          emissive: 0xfbbf24,
+          emissiveIntensity: 0.3,
+        });
+        const rib1 = new THREE.Mesh(new THREE.BoxGeometry(1.65, 1.65, 0.3), ribbonMat);
+        rib1.position.y = 1.4;
+        group.add(rib1);
+        const rib2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.65, 1.65), ribbonMat);
+        rib2.position.y = 1.4;
+        group.add(rib2);
+
+        // Ribbon bow on top
+        const bow = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.09, 8, 16), ribbonMat);
+        bow.position.y = 2.4;
+        bow.rotation.x = Math.PI / 4;
+        group.add(bow);
+
+        const beacon = new THREE.Mesh(
+          new THREE.RingGeometry(1.2, 2.0, 24),
+          new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.75, side: THREE.DoubleSide })
+        );
+        beacon.rotation.x = -Math.PI / 2;
+        beacon.position.y = 0.08;
+        group.add(beacon);
+
+      } else {
+        // 3. Ледяной Сундучок с подарками (Ледяной щит + Тройной бросок!)
+        const chestMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.35, metalness: 0.6 });
+        const goldTrimMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.2, metalness: 0.9 });
+
+        const chestBase = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.2, 1.3), chestMat);
+        chestBase.position.y = 1.1;
+        chestBase.castShadow = true;
+        group.add(chestBase);
+
+        const chestLid = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.65, 0.65, 2.0, 16, 1, false, 0, Math.PI),
+          chestMat
+        );
+        chestLid.position.set(0, 1.7, 0);
+        chestLid.rotation.z = Math.PI / 2;
+        group.add(chestLid);
+
+        const lock = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.15), goldTrimMat);
+        lock.position.set(0, 1.25, 0.68);
+        group.add(lock);
+
+        const beacon = new THREE.Mesh(
+          new THREE.RingGeometry(1.2, 2.2, 24),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+        );
+        beacon.rotation.x = -Math.PI / 2;
+        beacon.position.y = 0.08;
+        group.add(beacon);
+      }
 
       group.position.set(x, 0, z);
       scene.add(group);
@@ -1191,14 +1319,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         .multiplyScalar(speed);
 
       // Fire Single or Triple
+      const dmgMultiplier = 1 + (upgrades?.snowballDamage || 0) * 0.15;
       const hasTriple = activePowerUps.some((p) => p.type === 'triple');
       if (hasTriple) {
         [-0.15, 0, 0.15].forEach((angleOffset) => {
           const spreadVel = launchVelocity.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angleOffset);
-          fireSnowball(launchPos, spreadVel, 'blue', tier);
+          fireSnowball(launchPos, spreadVel, 'blue', tier, dmgMultiplier);
         });
       } else {
-        fireSnowball(launchPos, launchVelocity, 'blue', tier);
+        fireSnowball(launchPos, launchVelocity, 'blue', tier, dmgMultiplier);
       }
 
       // Arm energetic throw animation
@@ -1532,7 +1661,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Charge and Sculpting Snowball Mechanics
         if (isCharging) {
           const elapsed = (performance.now() - chargeStartTime) / 1000;
-          chargeAmount = Math.min(1.0, elapsed / 1.5); // 1.5s to reach large mega snowball!
+          const sculptRate = 1 + (upgrades?.sculptSpeed || 0) * 0.25;
+          chargeAmount = Math.min(1.0, (elapsed / 1.5) * sculptRate); // 1.5s (faster with upgrades) to reach large snowball!
 
           // CRITICAL: Rotate snowman to face the camera crosshair aim direction while sculpting!
           const aimAngle = Math.atan2(_vCamForward.x, _vCamForward.z);
@@ -1580,7 +1710,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           onChargeChange(quantizedCharge);
         }
 
-        if (!isDashing && stamina < 100) stamina = Math.min(100, stamina + delta * 25);
+        const staminaRegen = 25 * (1 + (upgrades?.staminaSpeed || 0) * 0.25);
+        if (!isDashing && stamina < 100) stamina = Math.min(100, stamina + delta * staminaRegen);
         const roundedStamina = Math.round(stamina);
         if (roundedStamina !== lastSentStamina) {
           lastSentStamina = roundedStamina;
@@ -1620,29 +1751,63 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           player.shieldMesh.rotation.y += delta * 2;
         }
 
+        // Festive Holiday Pickups Collection
         for (let i = worldPowerUps.length - 1; i >= 0; i--) {
           const pw = worldPowerUps[i];
-          pw.mesh.rotation.y += delta * 2.5;
-          pw.mesh.position.y = 1.6 + Math.sin(time * 3 + i) * 0.35;
+          pw.mesh.rotation.y += delta * 2.2;
+          pw.mesh.position.y = 1.3 + Math.sin(time * 3 + i) * 0.3;
 
           if (pw.position.distanceTo(player.group.position) < 4.0) {
-            sounds.playPowerup();
             statsRef.current.powerupsCollected++;
 
-            if (pw.type === 'heal') {
-              player.hp = Math.min(player.maxHp, player.hp + 35);
+            if (pw.type === 'sack') {
+              // Santa's Sack: +45 HP!
+              sounds.playPowerup();
+              player.hp = Math.min(player.maxHp, player.hp + 45);
               onFloatingText({
                 id: Math.random().toString(),
-                text: '+35 HP',
+                text: 'МЕШОК С ПОДАРКАМИ: +45 HP ❤️',
                 color: '#22c55e',
                 x: player.group.position.x,
                 y: player.group.position.y + 10,
                 z: player.group.position.z,
-                life: 1.2,
-                maxLife: 1.2,
+                life: 1.4,
+                maxLife: 1.4,
               });
-            } else {
-              activePowerUps.push({ type: pw.type, expiresAt: nowSec + 10 });
+              spawnSnowBurst(pw.position, 20);
+
+            } else if (pw.type === 'gift_bag') {
+              // Gift Bag: +25 Gold Coins!
+              sounds.playCoin();
+              onCoinCollected?.(25);
+              onFloatingText({
+                id: Math.random().toString(),
+                text: 'ПАКЕТ С ПОДАРКАМИ: +25 МОНЕТ! 🪙',
+                color: '#facc15',
+                x: player.group.position.x,
+                y: player.group.position.y + 10,
+                z: player.group.position.z,
+                life: 1.4,
+                maxLife: 1.4,
+              });
+              spawnSnowBurst(pw.position, 20);
+
+            } else if (pw.type === 'chest') {
+              // Ice Chest: Shield + Triple Snowballs!
+              sounds.playVictory();
+              activePowerUps.push({ type: 'shield', expiresAt: nowSec + 14 });
+              activePowerUps.push({ type: 'triple', expiresAt: nowSec + 14 });
+              onFloatingText({
+                id: Math.random().toString(),
+                text: 'СУНДУЧОК: ЛЕДЯНОЙ ЩИТ + ТРОЙНОЙ БРОСОК! ❄️',
+                color: '#38bdf8',
+                x: player.group.position.x,
+                y: player.group.position.y + 10,
+                z: player.group.position.z,
+                life: 1.5,
+                maxLife: 1.5,
+              });
+              spawnSnowBurst(pw.position, 28, true);
             }
 
             scene.remove(pw.mesh);

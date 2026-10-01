@@ -1,6 +1,6 @@
 import React from 'react';
 import { GameMode, Difficulty, AimMode, ActivePowerUp } from '../types/game';
-import { Shield, Zap, Sparkles, Volume2, VolumeX, Pause, Info, SlidersHorizontal, RefreshCw } from 'lucide-react';
+import { Shield, Zap, Sparkles, Volume2, VolumeX, Pause, Info, SlidersHorizontal, RefreshCw, ShoppingBag, Coins, Music } from 'lucide-react';
 
 interface HUDProps {
   playerHp: number;
@@ -16,6 +16,10 @@ interface HUDProps {
   wave: number;
   remainingEnemies: number;
   isMuted: boolean;
+  coins: number;
+  isBgmPlaying: boolean;
+  onToggleBgm: () => void;
+  onOpenShop: () => void;
   onToggleMute: () => void;
   onTogglePause: () => void;
   onOpenSettings: () => void;
@@ -37,6 +41,10 @@ export const HUD: React.FC<HUDProps> = ({
   wave,
   remainingEnemies,
   isMuted,
+  coins,
+  isBgmPlaying,
+  onToggleBgm,
+  onOpenShop,
   onToggleMute,
   onTogglePause,
   onOpenSettings,
@@ -99,12 +107,34 @@ export const HUD: React.FC<HUDProps> = ({
           {/* Quick Action Buttons */}
           <div className="flex items-center gap-1.5 pointer-events-auto">
             <button
+              onClick={onOpenShop}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/90 to-yellow-500/90 hover:brightness-110 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 transition-all active:scale-95"
+              title="Новогодний Магазин & Улучшения"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Магазин</span>
+              <span className="flex items-center gap-1 font-mono text-[11px] bg-slate-950/20 px-1.5 py-0.5 rounded-md">
+                <Coins className="w-3 h-3 fill-slate-950" /> {coins}
+              </span>
+            </button>
+            <button
+              onClick={onToggleBgm}
+              className={`p-1.5 rounded-lg border transition-all active:scale-95 ${
+                isBgmPlaying
+                  ? 'bg-amber-500/20 border-amber-400/50 text-amber-300 shadow-sm'
+                  : 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 border-slate-700'
+              }`}
+              title={isBgmPlaying ? 'Выключить новогоднюю музыку' : 'Включить новогоднюю музыку (Jingle Bells)'}
+            >
+              <Music className="w-4 h-4" />
+            </button>
+            <button
               onClick={onOpenAnalysis}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/80 hover:bg-sky-500 text-white text-xs font-semibold shadow-md transition-all active:scale-95"
-              title="Открыть анализ кода и список улучшений"
+              title="Открыть анализ игры"
             >
               <Info className="w-3.5 h-3.5" />
-              <span>Анализ игры</span>
+              <span>Анализ</span>
             </button>
             <button
               onClick={onToggleMute}

@@ -351,6 +351,188 @@ class SoundEngine {
     noise.start(now);
     noise.stop(now + 0.19);
   }
+
+  // Sparkling festive coin collection sound
+  public playCoin() {
+    if (this.isMuted) return;
+    this.resume();
+    if (!this.ctx || !this.masterGain) return;
+
+    const now = this.ctx.currentTime;
+    const notes = [987.77, 1318.51, 1567.98]; // B5, E6, G6
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      const t = now + idx * 0.07;
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.2, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(t);
+      osc.stop(t + 0.36);
+    });
+  }
+
+  // --- FESTIVE CHRISTMAS BACKGROUND MUSIC (JINGLE BELLS CHIME & MUSIC BOX) ---
+  private bgmGain: GainNode | null = null;
+  private isBgmActive: boolean = false;
+  private bgmTimeoutId: any = null;
+
+  public startBgm() {
+    if (this.isBgmActive) return;
+    this.resume();
+    if (!this.ctx) return;
+
+    this.isBgmActive = true;
+    if (!this.bgmGain) {
+      this.bgmGain = this.ctx.createGain();
+      this.bgmGain.gain.value = this.isMuted ? 0 : 0.22;
+      this.bgmGain.connect(this.ctx.destination);
+    }
+
+    this.playNextBgmLoop();
+  }
+
+  public stopBgm() {
+    this.isBgmActive = false;
+    if (this.bgmTimeoutId) {
+      clearTimeout(this.bgmTimeoutId);
+      this.bgmTimeoutId = null;
+    }
+  }
+
+  public toggleBgm(): boolean {
+    if (this.isBgmActive) {
+      this.stopBgm();
+      return false;
+    } else {
+      this.startBgm();
+      return true;
+    }
+  }
+
+  public isBgmRunning(): boolean {
+    return this.isBgmActive;
+  }
+
+  private playNextBgmLoop() {
+    if (!this.isBgmActive || !this.ctx || !this.bgmGain) return;
+
+    const now = this.ctx.currentTime;
+    const tempo = 0.24; // Quarter note beat in seconds
+
+    // Jingle Bells Holiday melody notes { f: Hz, d: duration, p: pause }
+    const melody = [
+      // Jin-gle bells, jin-gle bells,
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 659.25, d: 0.45, b: 2 },
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 659.25, d: 0.45, b: 2 },
+      // Jin-gle all the way!
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 783.99, d: 0.2, b: 1 },
+      { f: 523.25, d: 0.2, b: 1 },
+      { f: 587.33, d: 0.2, b: 1 },
+      { f: 659.25, d: 0.7, b: 3 },
+      { f: 0, d: 0.1, b: 1 }, // rest
+      // Oh what fun it is to ride,
+      { f: 698.46, d: 0.2, b: 1 },
+      { f: 698.46, d: 0.2, b: 1 },
+      { f: 698.46, d: 0.25, b: 1 },
+      { f: 698.46, d: 0.2, b: 1 },
+      { f: 698.46, d: 0.2, b: 1 },
+      // In a one-horse o-pen sleigh, hey!
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 659.25, d: 0.2, b: 1 },
+      { f: 783.99, d: 0.2, b: 1 },
+      { f: 783.99, d: 0.2, b: 1 },
+      { f: 698.46, d: 0.2, b: 1 },
+      { f: 587.33, d: 0.2, b: 1 },
+      { f: 523.25, d: 0.7, b: 3 },
+      { f: 0, d: 0.1, b: 1 }, // rest
+    ];
+
+    let cursor = now + 0.05;
+    let totalBeats = 0;
+
+    melody.forEach((note) => {
+      const beatLen = note.b * tempo;
+      totalBeats += note.b;
+
+      if (note.f > 0 && !this.isMuted) {
+        // Celesta Bell primary oscillator
+        const osc = this.ctx!.createOscillator();
+        const osc2 = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(note.f, cursor);
+
+        // Warm harmonic chime overtone
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(note.f * 2.0, cursor);
+
+        gain.gain.setValueAtTime(0, cursor);
+        gain.gain.linearRampToValueAtTime(0.18, cursor + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, cursor + note.d * 1.4);
+
+        osc.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.bgmGain!);
+
+        osc.start(cursor);
+        osc2.start(cursor);
+        osc.stop(cursor + note.d * 1.5);
+        osc2.stop(cursor + note.d * 1.5);
+
+        // Soft sleigh-bell chime on key beats
+        if (Math.random() < 0.65) {
+          this.playSleighBell(cursor);
+        }
+      }
+
+      cursor += beatLen;
+    });
+
+    const loopDurationMs = totalBeats * tempo * 1000;
+    this.bgmTimeoutId = setTimeout(() => {
+      if (this.isBgmActive) {
+        this.playNextBgmLoop();
+      }
+    }, loopDurationMs - 100);
+  }
+
+  // Soft metallic sleigh bell chime
+  private playSleighBell(time: number) {
+    if (!this.ctx || !this.bgmGain || this.isMuted) return;
+
+    const freqs = [2400, 3100, 4200];
+    freqs.forEach((fr) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(fr + Math.random() * 50, time);
+
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(0.035, time + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0005, time + 0.09);
+
+      osc.connect(gain);
+      gain.connect(this.bgmGain!);
+
+      osc.start(time);
+      osc.stop(time + 0.1);
+    });
+  }
 }
 
 export const sounds = new SoundEngine();
